@@ -1,0 +1,48 @@
+[
+    {
+        "filename": "plant_cell.jpg",
+        "description": "Diagram of a eukaryotic plant cell showing the thick cell wall, large central vacuole, chloroplasts, nucleus, mitochondria, and plasmodesmata."
+    },
+    {
+        "filename": "animal_cell.jpg",
+        "description": "Diagram of a eukaryotic animal cell showing the plasma membrane, centrioles, lysosomes, nucleus, mitochondria, and Golgi apparatus. Note the absence of a cell wall and chloroplasts."
+    },
+    {
+        "filename": "prokaryotic_cell.jpg",
+        "description": "Structure of a prokaryotic bacterial cell showing the nucleoid region (DNA), plasmid, ribosomes, cell envelope (capsule, cell wall, plasma membrane), pili, and flagellum."
+    },
+    {
+        "filename": "mitochondria.jpg",
+        "description": "Longitudinal section of a mitochondrion showing the double membrane structure. The inner membrane is folded into cristae to increase surface area. It contains the matrix and is the site of aerobic respiration and ATP production."
+    },
+    {
+        "filename": "chloroplast.jpg",
+        "description": "Sectional view of a chloroplast showing the double membrane, stroma, and thylakoids arranged in stacks called grana. It is the site of photosynthesis in plant cells."
+    },
+    {
+        "filename": "nucleus.jpg",
+        "description": "Structure of the cell nucleus showing the double-layered nuclear envelope with nuclear pores, the nucleolus (site of ribosome synthesis), and chromatin network."
+    },
+    {
+        "filename": "endoplasmic_reticulum.jpg",
+        "description": "Diagram of the Endoplasmic Reticulum (ER) showing the Rough ER (RER) studded with ribosomes for protein synthesis, and the Smooth ER (SER) involved in lipid synthesis."
+    },
+    {
+        "filename": "golgi_apparatus.jpg",
+        "description": "Diagram of the Golgi apparatus (or Golgi complex) showing stacks of flattened sacs called cisternae. It has a cis (forming) face and a trans (maturing) face, involved in packaging and secretion."
+    },
+    
+    {
+        "filename": "ribosome.jpg",
+        "description": "Structure of a ribosome showing the large subunit and small subunit. These non-membrane bound organelles are the site of protein synthesis."
+    },
+    {
+        "filename": "fluid_mosaic_model.jpg",
+        "description": "The Fluid Mosaic Model of the plasma membrane showing the phospholipid bilayer with hydrophilic heads and hydrophobic tails, along with integral proteins, peripheral proteins, and sugar chains."
+    },
+   
+    {
+        "filename": "chromosome.jpg",
+        "description": "Structure of a metaphase chromosome showing two sister chromatids held together at the primary constriction or centromere. Kinetochores are present at the centromere."
+    }
+]

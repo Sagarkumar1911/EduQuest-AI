@@ -1,0 +1,18 @@
+# Python junk
+__pycache__/
+*.pyc
+
+# Virtual Environment
+venv/
+.env
+
+# Large Data & Database (Don't upload the actual DB, teammates will re-generate it)
+qdrant_db/
+
+# Optional: If you want to share the raw PDF/Images, keep 'data/' 
+# BUT if the PDF is huge (>100MB), ignore it. 
+# For now, we will ALLOW data uploads so your teammate gets the PDF.
+# data/
+
+# OS junk
+.DS_Store
