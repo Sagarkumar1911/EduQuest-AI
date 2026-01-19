@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduAccess AI | Personalized Learning</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #050511; /* Very dark blue from screenshot */
+            --bg-card: rgba(30, 41, 59, 0.7); /* Glassmorphism */
+            --primary: #6366f1; /* Purple/Blue accent */
+            --primary-hover: #4f46e5;
+            --text-main: #ffffff;
+            --text-muted: #94a3b8;
+            --gradient-glow: radial-gradient(circle at 50% -20%, #3b82f633, transparent 70%);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            height: 100vh;
+            overflow-x: hidden;
+            background-image: var(--gradient-glow);
+        }
+
+        /* --- NAVBAR --- */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 40px;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .logo span { color: var(--primary); }
+        .tagline { font-size: 0.8rem; color: var(--text-muted); font-weight: 400; margin-left: 10px; border-left: 1px solid #333; padding-left: 10px; }
+        
+        .memory-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            transition: 0.3s;
+        }
+        .memory-btn:hover { background: rgba(255, 255, 255, 0.2); }
+
+        /* --- HERO SECTION (Search) --- */
+        .hero {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-top: 60px;
+            text-align: center;
+            padding: 0 20px;
+        }
+
+        h1 { font-size: 3.5rem; font-weight: 700; margin-bottom: 10px; }
+        .sub-hero { color: var(--text-muted); margin-bottom: 40px; font-size: 1.1rem; }
+
+        .search-container {
+            width: 100%;
+            max-width: 800px;
+            position: relative;
+        }
+        
+        .search-box {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .search-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            padding: 15px;
+            font-size: 1.1rem;
+            outline: none;
+        }
+        .search-input::placeholder { color: #64748b; }
+
+        .search-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .search-btn:hover { background: var(--primary-hover); transform: scale(1.02); }
+
+        /* --- PREFERENCES PANEL --- */
+        .prefs-panel {
+            width: 100%;
+            max-width: 800px;
+            margin-top: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .pref-group { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+        .pref-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+        
+        .format-toggles { display: flex; background: #0f172a; border-radius: 8px; padding: 4px; }
+        .toggle-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .toggle-btn.active { background: #1e293b; color: white; border: 1px solid #334155; }
+
+        .dropdown {
+            background: #0f172a;
+            color: white;
+            border: 1px solid #334155;
+            padding: 10px 15px;
+            border-radius: 8px;
+            outline: none;
+            cursor: pointer;
+            min-width: 150px;
+        }
+
+        /* --- RESULTS SECTION (Initially Hidden) --- */
+        #results-area {
+            max-width: 1200px;
+            margin: 40px auto;
+            display: none; /* Hidden */
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            padding: 20px;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        .result-card {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+        }
+
+        .ai-text { line-height: 1.7; color: #e2e8f0; white-space: pre-wrap; }
+        
+        iframe { width: 100%; height: 250px; border-radius: 12px; border: none; margin-top: 15px; }
+        .img-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .img-grid img { width: 100%; border-radius: 8px; border: 1px solid #334155; cursor: pointer; transition: 0.2s; }
+        .img-grid img:hover { transform: scale(1.05); }
+
+        /* --- SIDEBAR --- */
+        .sidebar {
+            position: fixed;
+            top: 0; right: -300px;
+            width: 300px;
+            height: 100%;
+            background: #020617;
+            border-left: 1px solid #334155;
+            padding: 20px;
+            transition: 0.3s;
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        .sidebar.open { right: 0; }
+        .history-item {
+            padding: 12px;
+            border-bottom: 1px solid #1e293b;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .history-item:hover { background: #1e293b; }
+
+        /* --- TOOLS (Quiz, Upload) --- */
+        .tool-btn {
+            width: 100%;
+            padding: 12px;
+            margin-top: 10px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .tool-btn:hover { border-color: var(--primary); }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div class="logo">
+            🧠 EduAccess <span>AI</span>
+            <div class="tagline">Personalized Learning for Everyone</div>
+        </div>
+        <button class="memory-btn" onclick="toggleHistory()">
+            ✨ AI Memory
+        </button>
+    </nav>
+
+    <aside class="sidebar" id="history-sidebar">
+        <h3>📚 Learning History</h3>
+        <div id="history-list" style="margin-top:20px; color:#94a3b8;">Loading...</div>
+    </aside>
+
+    <section class="hero" id="hero-section">
+        <h1>Discover Learning Content</h1>
+        <p class="sub-hero">Tailored to your accessibility needs and learning style</p>
+
+        <div class="search-container">
+            <div class="search-box">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 10px;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="query-input" class="search-input" placeholder="What do you want to learn today?">
+                <button class="search-btn" onclick="startLearning()">Search</button>
+            </div>
+        </div>
+
+        <div class="prefs-panel">
+            <div class="pref-group">
+                <span class="pref-label">✨ Learning Preferences</span>
+                <div class="format-toggles">
+                    <button class="toggle-btn active" onclick="setFormat('text', this)">Text</button>
+                    <button class="toggle-btn" onclick="setFormat('audio', this)">Audio</button>
+                    <button class="toggle-btn" onclick="setFormat('visual', this)">Visual</button>
+                </div>
+            </div>
+
+            <div class="pref-group">
+                <span class="pref-label">Difficulty</span>
+                <select class="dropdown" id="difficulty-select">
+                    <option value="Beginner">Beginner (Simple)</option>
+                    <option value="Intermediate" selected>Intermediate</option>
+                    <option value="Advanced">Advanced (Technical)</option>
+                </select>
+            </div>
+
+            <div class="pref-group">
+                <span class="pref-label">Language</span>
+                <select class="dropdown" id="language-select">
+                    <option value="English">English</option>
+                    <option value="Hindi">Hindi</option>
+                    <option value="French">French</option>
+                    <option value="Spanish">Spanish</option>
+                </select>
+            </div>
+        </div>
+        
+        <div id="rec-banner" style="margin-top:20px; color:var(--primary); font-size:0.9rem; display:none;">
+            💡 <strong>Recommended:</strong> <span id="rec-text">Loading...</span>
+        </div>
+    </section>
+
+    <main id="results-area">
+        <div class="result-card">
+            <h2 id="result-title" style="margin-bottom:20px; color:var(--primary);">Topic Explanation</h2>
+            <div id="ai-response" class="ai-text">Thinking...</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:20px;">
+            <div class="result-card">
+                <h3>📷 Visuals</h3>
+                <div id="image-container" class="img-grid"></div>
+            </div>
+
+            <div class="result-card">
+                <h3>🎥 Related Video</h3>
+                <div id="video-container"></div>
+            </div>
+
+            <div class="result-card">
+                <h3>🛠️ Smart Tools</h3>
+                <button class="tool-btn" onclick="generateQuiz()">
+                    <span>📝 Take a Quiz</span> <span>→</span>
+                </button>
+                
+                <div style="margin-top:10px; border-top:1px solid #334155; padding-top:10px;">
+                    <span style="font-size:0.8rem; color:#94a3b8;">Upload Image for AI Analysis</span>
+                    <input type="file" id="img-upload" style="margin-top:5px; font-size:0.8rem;">
+                    <button class="tool-btn" style="margin-top:5px; background:var(--primary);" onclick="uploadImage()">Analyze Image</button>
+                </div>
+                <div id="tool-output" style="margin-top:10px; font-size:0.9rem; color:#e2e8f0;"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000";
+        let activeFormat = 'text';
+
+        // 1. UI Logic: Toggle Buttons
+        function setFormat(fmt, btn) {
+            activeFormat = fmt;
+            document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        function toggleHistory() {
+            document.getElementById('history-sidebar').classList.toggle('open');
+            loadHistory();
+        }
+
+        // 2. MAIN FUNCTION: START LEARNING
+        async function startLearning() {
+            const query = document.getElementById('query-input').value;
+            const diff = document.getElementById('difficulty-select').value;
+            const lang = document.getElementById('language-select').value;
+
+            if (!query) return alert("Please enter a topic!");
+
+            // Animation: Hide Hero partly, Show Results
+            document.getElementById('results-area').style.display = "grid";
+            document.getElementById('result-title').innerText = `Explaining: ${query}`;
+            document.getElementById('ai-response').innerText = "🤖 AI is reading the textbook and watching videos for you...";
+            
+            // Construct Prompt with Difficulty
+            // We append difficulty to query so backend sees it (e.g., "Mitosis (Explain as Beginner)")
+            const finalQuery = `${query} (Explain at ${diff} level)`;
+
+            try {
+                const response = await fetch(`${API_URL}/get-lesson`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query: finalQuery, language: lang })
+                });
+                const data = await response.json();
+
+                // A. Render Text
+                document.getElementById('ai-response').innerText = data.answer;
+
+                // B. Render Images
+                const imgBox = document.getElementById('image-container');
+                imgBox.innerHTML = "";
+                if(data.images && data.images.length > 0) {
+                    data.images.forEach(img => {
+                        imgBox.innerHTML += `<img src="${img.path}" alt="${img.description}" title="${img.description}">`;
+                    });
+                } else {
+                    imgBox.innerHTML = "<p style='font-size:0.8rem; color:#64748b;'>No diagram found in textbook.</p>";
+                }
+
+                // C. Render Video
+                const vidBox = document.getElementById('video-container');
+                if(data.video) {
+                    vidBox.innerHTML = `<iframe src="https://www.youtube.com/embed/${data.video.video_id}" allowfullscreen></iframe>
+                                        <p style='margin-top:5px; font-size:0.8rem;'>${data.video.title}</p>`;
+                }
+
+                // D. Auto-Scroll based on Format Preference
+                if (activeFormat === 'visual') {
+                    document.getElementById('image-container').scrollIntoView({ behavior: 'smooth' });
+                }
+
+                // E. Refresh Recommendations
+                loadRecommendation();
+
+            } catch (error) {
+                document.getElementById('ai-response').innerText = "❌ Error connecting to EduQuest Brain. Is the backend running?";
+                console.error(error);
+            }
+        }
+
+        // 3. LOAD HISTORY
+        async function loadHistory() {
+            try {
+                const res = await fetch(`${API_URL}/get-student-history`);
+                const data = await res.json();
+                const list = document.getElementById('history-list');
+                list.innerHTML = "";
+                data.history.forEach(item => {
+                    list.innerHTML += `<div class="history-item" onclick="document.getElementById('query-input').value='${item.topic}'; startLearning();">
+                        <strong>${item.topic}</strong><br>
+                        <small>${item.date}</small>
+                    </div>`;
+                });
+            } catch (e) { console.log("History load error"); }
+        }
+
+        // 4. LOAD RECOMMENDATION
+        async function loadRecommendation() {
+            try {
+                const res = await fetch(`${API_URL}/get-recommendation`);
+                const data = await res.json();
+                document.getElementById('rec-text').innerText = data.suggestion;
+                document.getElementById('rec-banner').style.display = 'block';
+            } catch (e) {}
+        }
+
+        // 5. QUIZ TOOL
+        async function generateQuiz() {
+            const topic = document.getElementById('query-input').value;
+            if(!topic) return alert("Search a topic first!");
+            
+            const out = document.getElementById('tool-output');
+            out.innerHTML = "Generating Quiz...";
+            
+            const res = await fetch(`${API_URL}/get-quiz`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: topic })
+            });
+            const data = await res.json();
+            const quiz = JSON.parse(data.quiz_data).questions[0]; // Show 1st Q
+            
+            out.innerHTML = `<strong>Q: ${quiz.question}</strong><br>`;
+            quiz.options.forEach(opt => {
+                out.innerHTML += `<button style="margin:5px; padding:5px; width:100%; border:1px solid #475569; background:#0f172a; color:white; cursor:pointer;" onclick="alert('${opt === quiz.answer ? '✅ Correct!' : '❌ Try Again'}')">${opt}</button>`;
+            });
+        }
+
+        // 6. IMAGE UPLOAD
+        async function uploadImage() {
+            const file = document.getElementById('img-upload').files[0];
+            if(!file) return alert("Select a file!");
+            
+            const formData = new FormData();
+            formData.append("file", file);
+            
+            document.getElementById('tool-output').innerText = "Analyzing Image...";
+            
+            const res = await fetch(`${API_URL}/explain-image`, { method: "POST", body: formData });
+            const data = await res.json();
+            
+            document.getElementById('tool-output').innerText = "AI Analysis: " + data.explanation;
+        }
+
+        // Init
+        loadRecommendation();
+    </script>
+</body>
+</html>
