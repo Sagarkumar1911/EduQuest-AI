@@ -1,0 +1,7 @@
+qdrant-client
+sentence-transformers
+pymupdf
+pillow
+torch
+streamlit
+groq
