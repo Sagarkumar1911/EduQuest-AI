@@ -28,6 +28,7 @@ def get_relevant_video(query: str, api_key: str):  # <--- This is the missing fu
             video_id = item['id']['videoId']
             
             return {
+                "video_id": video_id,
                 "url": f"https://www.youtube.com/watch?v={video_id}",
                 "embed_url": f"https://www.youtube.com/embed/{video_id}",
                 "title": item['snippet']['title'],

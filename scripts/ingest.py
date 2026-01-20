@@ -9,18 +9,21 @@ from PIL import Image
 
 
 # --- CONFIGURATION ---
-# We use ".." to go up one level from 'scripts' to the root folder
-DATA_PATH = os.path.join("..", "data")
+# Get the project root directory (one level up from scripts/)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+# Use "Data" (capital D) as that's the actual folder name
+DATA_PATH = os.path.join(parent_dir, "Data")
 PDF_FOLDER = os.path.join(DATA_PATH, "pdf")
 IMAGE_FOLDER = os.path.join(DATA_PATH, "images")
 METADATA_FILE = os.path.join(DATA_PATH, "image_metadata.json")
-DB_PATH = os.path.join("..", "qdrant_db")  # This folder will be created automatically
+DB_PATH = os.path.join(parent_dir, "qdrant_db")  # This folder will be created automatically
 
 KNOWLEDGE_COLLECTION = "textbook_knowledge"
 MEMORY_COLLECTION = "student_memory"
 
 # --- 1. INITIALIZE RESOURCES ---
-print("🚀 Initializing Qdrant and AI Model...")
+print("Initializing Qdrant and AI Model...")
 
 # Initialize Qdrant (Local Persistence)
 client = QdrantClient(path=DB_PATH)
@@ -52,19 +55,19 @@ def create_collections():
 
 # --- 2. PROCESS PDFS ---
 def process_pdfs():
-    print("📖 Processing PDFs...")
+    print("Processing PDFs...")
     points = []
     chunk_id = 0
 
     if not os.path.exists(PDF_FOLDER):
-        print(f"❌ Error: PDF Folder not found at {PDF_FOLDER}")
+        print(f"ERROR: PDF Folder not found at {PDF_FOLDER}")
         return [], 0
 
     # Find all PDFs
     pdf_files = [f for f in os.listdir(PDF_FOLDER) if f.endswith('.pdf')]
     
     if not pdf_files:
-        print("⚠️  No PDF files found in data/pdfs/")
+        print("WARNING: No PDF files found in data/pdfs/")
 
     for pdf_file in pdf_files:
         path = os.path.join(PDF_FOLDER, pdf_file)
@@ -91,19 +94,19 @@ def process_pdfs():
                     ))
                     chunk_id += 1
         except Exception as e:
-            print(f"❌ Error reading {pdf_file}: {e}")
+            print(f"ERROR: Error reading {pdf_file}: {e}")
 
-    print(f"   ✅ Extracted {len(points)} text chunks.")
+    print(f"   Extracted {len(points)} text chunks.")
     return points, chunk_id
 
 # --- 3. PROCESS IMAGES ---
 def process_images(start_id):
-    print("🖼️  Processing Images...")
+    print("Processing Images...")
     points = []
     current_id = start_id
 
     if not os.path.exists(METADATA_FILE):
-        print(f"⚠️  Metadata file missing: {METADATA_FILE}")
+        print(f"WARNING: Metadata file missing: {METADATA_FILE}")
         return []
 
     with open(METADATA_FILE, "r") as f:
@@ -133,11 +136,11 @@ def process_images(start_id):
                     }
                 ))
                 current_id += 1
-                print(f"   👉 Ingested: {filename}")
+                print(f"   Ingested: {filename}")
             except Exception as e:
-                print(f"❌ Error with {filename}: {e}")
+                print(f"ERROR: Error with {filename}: {e}")
         else:
-            print(f"⚠️  Image not found: {filename}")
+            print(f"WARNING: Image not found: {filename}")
 
     return points
 
@@ -153,12 +156,12 @@ if __name__ == "__main__":
 
     # Upload to Qdrant
     if all_data:
-        print(f"💾 Uploading {len(all_data)} items to database...")
+        print(f"Uploading {len(all_data)} items to database...")
         client.upsert(
             collection_name=KNOWLEDGE_COLLECTION,
             points=all_data
         )
-        print("🎉 SUCCESS! Database is ready.")
+        print("SUCCESS! Database is ready.")
         print(f"   - Database location: {os.path.abspath(DB_PATH)}")
     else:
-        print("⚠️  No data was found. Check your folders!")
+        print("WARNING: No data was found. Check your folders!")
