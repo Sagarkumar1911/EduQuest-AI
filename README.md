@@ -1,4 +1,4 @@
-# ☸️ Saarthi AI (formerly EduAccess)
+# 🧠 Saarthi AI 
 > **"See it. Hear it. Master it."**
 > A Multimodal AI Tutor bridging the gap between static textbooks and interactive mastery.
 
