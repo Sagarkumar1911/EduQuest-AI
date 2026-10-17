@@ -5,6 +5,7 @@ from groq import Groq
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 from sentence_transformers import SentenceTransformer
+from scripts.llm_config import chat_with_fallback
 
 # --- CONFIGURATION ---
 # Get the project root directory (one level up from scripts/)
@@ -12,14 +13,16 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 DB_PATH = os.path.join(parent_dir, "qdrant_db")
 HISTORY_COLLECTION = "student_history"
+TEXT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 # ⚠️ GLOBAL VARIABLES (Initially None)
 client = None
 encoder = None
+text_encoder = None
 
 def init_client():
     """Initializes the Database connection safely."""
-    global client, encoder
+    global client, encoder, text_encoder
     if client is None:
         try:
             print(f"Connecting to Qdrant Database at: {os.path.abspath(DB_PATH)}")
@@ -29,6 +32,9 @@ def init_client():
             print("Loading AI encoder model...")
             encoder = SentenceTransformer('clip-ViT-B-32')
             print("Encoder loaded")
+            print("Loading text embedding model...")
+            text_encoder = SentenceTransformer(TEXT_MODEL)
+            print("Text encoder loaded")
             
             init_history_db()
         except Exception as e:
@@ -38,7 +44,7 @@ def init_client():
 
 def close_client():
     """Closes the connection safely."""
-    global client, encoder
+    global client, encoder, text_encoder
     try:
         if client:
             print("Closing Qdrant Connection...")
@@ -57,6 +63,8 @@ def close_client():
         # Clean up encoder if needed
         if encoder is not None:
             encoder = None
+        if text_encoder is not None:
+            text_encoder = None
             
     except Exception as e:
         # Ignore all errors during shutdown
@@ -111,23 +119,27 @@ def get_qdrant_history(limit=10):
     if not client: return []
     
     try:
-        result, _ = client.scroll(
-            collection_name=HISTORY_COLLECTION,
-            limit=limit,
-            with_payload=True
-        )
-        
         history_data = []
-        for point in result:
-            history_data.append({
-                "id": point.id,
-                "topic": point.payload['topic'],
-                "summary": point.payload['summary'],
-                "date": point.payload['timestamp']
-            })
+        offset = None
+        while True:
+            result, offset = client.scroll(
+                collection_name=HISTORY_COLLECTION,
+                limit=100,
+                offset=offset,
+                with_payload=True
+            )
+            for point in result:
+                history_data.append({
+                    "id": point.id,
+                    "topic": point.payload['topic'],
+                    "summary": point.payload['summary'],
+                    "date": point.payload['timestamp']
+                })
+            if offset is None:
+                break
             
         history_data.sort(key=lambda x: x['date'], reverse=True)
-        return history_data
+        return history_data[:limit]
     except Exception as e:
         print(f"WARNING: Error fetching history: {e}")
         return []
@@ -137,21 +149,24 @@ def get_all_history():
     if not client: return []
     
     try:
-        # Get all records (scroll with a large limit)
-        result, _ = client.scroll(
-            collection_name=HISTORY_COLLECTION,
-            limit=1000,  # Large limit to get all records
-            with_payload=True
-        )
-        
         history_data = []
-        for point in result:
-            history_data.append({
-                "id": point.id,
-                "topic": point.payload['topic'],
-                "summary": point.payload.get('summary', ''),
-                "date": point.payload['timestamp']
-            })
+        offset = None
+        while True:
+            result, offset = client.scroll(
+                collection_name=HISTORY_COLLECTION,
+                limit=100,
+                offset=offset,
+                with_payload=True
+            )
+            for point in result:
+                history_data.append({
+                    "id": point.id,
+                    "topic": point.payload['topic'],
+                    "summary": point.payload.get('summary', ''),
+                    "date": point.payload['timestamp']
+                })
+            if offset is None:
+                break
             
         history_data.sort(key=lambda x: x['date'], reverse=True)
         return history_data
@@ -251,11 +266,10 @@ Provide 2-3 specific, actionable recommendations to help them improve. Focus on:
 
 Keep it brief and motivational."""
                 
-                chat = groq_client.chat.completions.create(
+                recommendations_text = chat_with_fallback(
+                    groq_client,
                     messages=[{"role": "user", "content": prompt}],
-                    model="llama-3.3-70b-versatile",
                 )
-                recommendations_text = chat.choices[0].message.content
                 recommendations = [r.strip() for r in recommendations_text.split('\n') if r.strip() and not r.strip().startswith('#')]
             except Exception as e:
                 print(f"Warning: Could not generate AI recommendations: {e}")
@@ -312,7 +326,7 @@ def delete_history_record(point_id):
         return False
 
 def search_images(query_vector, limit=2):
-    """Searches specifically for images in the knowledge base."""
+    """Searches the image collection using a CLIP query vector."""
     if not client: return []
     
     try:
@@ -326,17 +340,49 @@ def search_images(query_vector, limit=2):
             ]
         )
         
-        search_results = client.search(
-            collection_name="textbook_knowledge",
-            query_vector=query_vector,
+        search_results = client.query_points(
+            collection_name="textbook_images",
+            query=query_vector,
             query_filter=img_filter,
             limit=limit,
             with_payload=True
-        )
+        ).points
         
-        return [res.payload for res in search_results]
+        return [
+            {**(res.payload or {}), "score": res.score}
+            for res in search_results
+        ]
     except Exception as e:
         print(f"WARNING: Image search failed: {e}")
+        return []
+
+def search_text(query_vector, limit):
+    """Searches the text collection using a MiniLM query vector."""
+    if not client: return []
+
+    try:
+        text_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="type",
+                    match=MatchValue(value="text")
+                )
+            ]
+        )
+
+        search_results = client.query_points(
+            collection_name="textbook_text",
+            query=query_vector,
+            query_filter=text_filter,
+            limit=limit,
+            with_payload=True
+        ).points
+        return [
+            {**(result.payload or {}), "score": result.score}
+            for result in search_results
+        ]
+    except Exception as e:
+        print(f"WARNING: Text search failed: {e}")
         return []
 
 def suggest_next_topic(groq_api_key):
@@ -355,10 +401,9 @@ def suggest_next_topic(groq_api_key):
         Return ONLY the topic name and a 1-sentence reason.
         """
 
-        chat_completion = client_groq.chat.completions.create(
+        return chat_with_fallback(
+            client_groq,
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.3-70b-versatile",
         )
-        return chat_completion.choices[0].message.content
     except Exception:
         return "Try studying 'Photosynthesis' next!"

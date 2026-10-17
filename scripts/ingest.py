@@ -1,167 +1,244 @@
-import os
 import json
-import fitz  # PyMuPDF
+import math
+import os
+import re
+
+import fitz
+from PIL import Image
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from sentence_transformers import SentenceTransformer
-from PIL import Image
+from tqdm.auto import tqdm
 
 
-
-# --- CONFIGURATION ---
-# Get the project root directory (one level up from scripts/)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
-# Use "Data" (capital D) as that's the actual folder name
 DATA_PATH = os.path.join(parent_dir, "Data")
 PDF_FOLDER = os.path.join(DATA_PATH, "pdf")
 IMAGE_FOLDER = os.path.join(DATA_PATH, "images")
 METADATA_FILE = os.path.join(DATA_PATH, "image_metadata.json")
-DB_PATH = os.path.join(parent_dir, "qdrant_db")  # This folder will be created automatically
+DB_PATH = os.path.join(parent_dir, "qdrant_db")
 
-KNOWLEDGE_COLLECTION = "textbook_knowledge"
-MEMORY_COLLECTION = "student_memory"
+TEXT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+CLIP_MODEL = "clip-ViT-B-32"
+TEXT_COLLECTION = "textbook_text"
+IMAGE_COLLECTION = "textbook_images"
+TEXT_VECTOR_SIZE = 384
+IMAGE_VECTOR_SIZE = 512
+BATCH_SIZE = 64
 
-# --- 1. INITIALIZE RESOURCES ---
-print("Initializing Qdrant and AI Model...")
-
-# Initialize Qdrant (Local Persistence)
+print("Initializing Qdrant and embedding models...")
 client = QdrantClient(path=DB_PATH)
+text_encoder = SentenceTransformer(TEXT_MODEL)
+clip_encoder = SentenceTransformer(CLIP_MODEL)
+text_tokenizer = text_encoder.tokenizer
 
-# Load CLIP Model (Multimodal)
-# This downloads about ~600MB the first time you run it
-encoder = SentenceTransformer('clip-ViT-B-32')
 
 def create_collections():
-    """Creates the empty database buckets."""
-    # 1. Knowledge Base
-    print(f"   Creating collection: {KNOWLEDGE_COLLECTION}")
-    client.recreate_collection(
-        collection_name=KNOWLEDGE_COLLECTION,
-        vectors_config=models.VectorParams(
-            size=512,  # Matches CLIP model size
-            distance=models.Distance.COSINE
+    """Rebuilds the separate text and image vector collections."""
+    existing = {collection.name for collection in client.get_collections().collections}
+    for collection_name, vector_size in (
+        (TEXT_COLLECTION, TEXT_VECTOR_SIZE),
+        (IMAGE_COLLECTION, IMAGE_VECTOR_SIZE),
+    ):
+        if collection_name in existing:
+            client.delete_collection(collection_name=collection_name)
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=models.VectorParams(
+                size=vector_size,
+                distance=models.Distance.COSINE,
+            ),
         )
-    )
-    # 2. Memory (Chat History)
-    print(f"   Creating collection: {MEMORY_COLLECTION}")
-    client.recreate_collection(
-        collection_name=MEMORY_COLLECTION,
-        vectors_config=models.VectorParams(
-            size=512,
-            distance=models.Distance.COSINE
-        )
-    )
 
-# --- 2. PROCESS PDFS ---
+
+def extract_text_blocks(page):
+    blocks = []
+    for block in page.get_text("blocks"):
+        if len(block) > 6 and block[6] == 0 and isinstance(block[4], str):
+            text = block[4].strip()
+            if text:
+                blocks.append((round(block[1]), block[0], block[1], block[3], text))
+    return sorted(blocks, key=lambda block: (block[0], block[1]))
+
+
+def repeated_lines_by_pdf(pages):
+    line_pages = {}
+    for page_index, blocks in enumerate(pages):
+        seen_on_page = set()
+        for block in blocks:
+            for line in block[4].splitlines():
+                normalized = " ".join(line.split()).casefold()
+                if normalized:
+                    seen_on_page.add(normalized)
+        for line in seen_on_page:
+            line_pages.setdefault(line, set()).add(page_index)
+
+    minimum_pages = max(2, math.ceil(len(pages) * 0.30))
+    return {
+        line
+        for line, page_indices in line_pages.items()
+        if len(page_indices) >= minimum_pages
+    }
+
+
+def printed_page_number(blocks, page_height):
+    lines = []
+    for block in blocks:
+        for line in block[4].splitlines():
+            stripped = line.strip()
+            if stripped:
+                lines.append((block[2], block[3], stripped))
+    for y0, y1, line in lines:
+        if line.isdigit() and (y0 <= page_height * 0.10 or y1 >= page_height * 0.90):
+            return line
+    return None
+
+
+def page_text_without_headers(blocks, repeated_lines):
+    remaining = []
+    for block in blocks:
+        block_text = block[4].strip()
+        if block_text.isdigit() or "reprint" in block_text.casefold():
+            continue
+        lines = [
+            line.strip()
+            for line in block_text.splitlines()
+            if " ".join(line.split()).casefold() not in repeated_lines
+        ]
+        if lines:
+            remaining.extend(lines)
+    return re.sub(r"\s+", " ", " ".join(remaining)).strip()
+
+
+def split_word_windows(text):
+    words = text.split()
+    if len(words) < 30:
+        return []
+    spans = [
+        (start, min(start + 120, len(words)))
+        for start in range(0, len(words), 100)
+    ]
+    if len(spans) > 1 and spans[-1][1] - spans[-1][0] < 30:
+        spans[-2] = (spans[-2][0], spans[-1][1])
+        spans.pop()
+    return [" ".join(words[start:end]) for start, end in spans]
+
+
 def process_pdfs():
-    print("Processing PDFs...")
-    points = []
-    chunk_id = 0
+    if not os.path.isdir(PDF_FOLDER):
+        print(f"ERROR: PDF folder not found: {PDF_FOLDER}")
+        print("PDFs processed: 0 of 0")
+        return 0, 0
 
-    if not os.path.exists(PDF_FOLDER):
-        print(f"ERROR: PDF Folder not found at {PDF_FOLDER}")
-        return [], 0
-
-    # Find all PDFs
-    pdf_files = [f for f in os.listdir(PDF_FOLDER) if f.endswith('.pdf')]
-    
-    if not pdf_files:
-        print("WARNING: No PDF files found in data/pdfs/")
+    pdf_files = [
+        filename
+        for filename in os.listdir(PDF_FOLDER)
+        if filename.lower().endswith(".pdf")
+    ]
+    text_chunks = []
+    processed_count = 0
 
     for pdf_file in pdf_files:
         path = os.path.join(PDF_FOLDER, pdf_file)
-        print(f"   Processing: {pdf_file}")
-        
         try:
-            doc = fitz.open(path)
-            for page_num, page in enumerate(doc):
-                text = page.get_text()
-                # Split by paragraphs (double newline)
-                chunks = [c.strip() for c in text.split('\n\n') if len(c.strip()) > 50]
-                
-                for chunk in chunks:
-                    vector = encoder.encode(chunk).tolist()
-                    points.append(models.PointStruct(
-                        id=chunk_id,
-                        vector=vector,
-                        payload={
-                            "type": "text",
-                            "content": chunk,
-                            "page": page_num + 1,
-                            "source": pdf_file
-                        }
-                    ))
-                    chunk_id += 1
-        except Exception as e:
-            print(f"ERROR: Error reading {pdf_file}: {e}")
+            with fitz.open(path) as document:
+                page_blocks = [extract_text_blocks(page) for page in document]
+                repeated_lines = repeated_lines_by_pdf(page_blocks)
+                file_chunks = []
+                for page_index, (page, blocks) in enumerate(zip(document, page_blocks)):
+                    printed_page = printed_page_number(blocks, page.rect.height)
+                    page_text = page_text_without_headers(blocks, repeated_lines)
+                    for chunk_index, content in enumerate(split_word_windows(page_text)):
+                        file_chunks.append(
+                            {
+                                "type": "text",
+                                "content": content,
+                                "page": page_index + 1,
+                                "printed_page": printed_page,
+                                "source": pdf_file,
+                                "chunk_index": chunk_index,
+                            }
+                        )
+            text_chunks.extend(file_chunks)
+            processed_count += 1
+        except Exception as error:
+            print(f"ERROR: Could not read PDF {pdf_file}: {error}")
 
-    print(f"   Extracted {len(points)} text chunks.")
-    return points, chunk_id
+    token_counts = [
+        len(text_tokenizer(chunk["content"], add_special_tokens=True, truncation=False)["input_ids"])
+        for chunk in text_chunks
+    ]
+    long_chunks = sum(token_count > 200 for token_count in token_counts)
+    print(f"Text chunks longer than 200 MiniLM tokens: {long_chunks}")
 
-# --- 3. PROCESS IMAGES ---
-def process_images(start_id):
-    print("Processing Images...")
-    points = []
-    current_id = start_id
+    for start in tqdm(
+        range(0, len(text_chunks), BATCH_SIZE),
+        desc="Embedding text chunks",
+        unit="batch",
+    ):
+        batch_payloads = text_chunks[start:start + BATCH_SIZE]
+        vectors = text_encoder.encode(
+            [item["content"] for item in batch_payloads],
+            batch_size=BATCH_SIZE,
+            show_progress_bar=False,
+        ).tolist()
+        points = [
+            models.PointStruct(id=start + index, vector=vector, payload=payload)
+            for index, (payload, vector) in enumerate(zip(batch_payloads, vectors))
+        ]
+        client.upsert(collection_name=TEXT_COLLECTION, points=points)
 
+    print(f"Text chunks stored: {len(text_chunks)}")
+    print(f"PDFs processed: {processed_count} of {len(pdf_files)}")
+    return len(text_chunks), processed_count
+
+
+def process_images():
     if not os.path.exists(METADATA_FILE):
         print(f"WARNING: Metadata file missing: {METADATA_FILE}")
-        return []
+        return 0
 
-    with open(METADATA_FILE, "r") as f:
-        metadata = json.load(f)
+    with open(METADATA_FILE, "r", encoding="utf-8") as metadata_file:
+        metadata = json.load(metadata_file)
 
+    points = []
     for item in metadata:
         filename = item["filename"]
         description = item["description"]
-        img_path = os.path.join(IMAGE_FOLDER, filename)
+        image_path = os.path.join(IMAGE_FOLDER, filename)
+        if not os.path.exists(image_path):
+            print(f"WARNING: Image not found: {filename}")
+            continue
 
-        if os.path.exists(img_path):
-            try:
-                # Open Image
-                image = Image.open(img_path)
-                # Convert Image to Vector (The Magic Part)
-                vector = encoder.encode(image).tolist()
-                
-                points.append(models.PointStruct(
-                    id=current_id,
+        try:
+            with Image.open(image_path) as image:
+                vector = clip_encoder.encode(image.copy()).tolist()
+            points.append(
+                models.PointStruct(
+                    id=len(points),
                     vector=vector,
                     payload={
                         "type": "image",
                         "content": description,
-                        "image_path": img_path, # Path for Streamlit to display
+                        "image_path": image_path,
                         "source": filename,
-                        "page": 0 
-                    }
-                ))
-                current_id += 1
-                print(f"   Ingested: {filename}")
-            except Exception as e:
-                print(f"ERROR: Error with {filename}: {e}")
-        else:
-            print(f"WARNING: Image not found: {filename}")
+                        "page": 0,
+                    },
+                )
+            )
+            print(f"   Ingested: {filename}")
+        except Exception as error:
+            print(f"ERROR: Error with {filename}: {error}")
 
-    return points
+    if points:
+        client.upsert(collection_name=IMAGE_COLLECTION, points=points)
+    print(f"Images stored: {len(points)}")
+    return len(points)
 
-# --- MAIN EXECUTION ---
+
 if __name__ == "__main__":
     create_collections()
-    
-    # Run Processing
-    text_data, last_id = process_pdfs()
-    image_data = process_images(start_id=last_id)
-    
-    all_data = text_data + image_data
-
-    # Upload to Qdrant
-    if all_data:
-        print(f"Uploading {len(all_data)} items to database...")
-        client.upsert(
-            collection_name=KNOWLEDGE_COLLECTION,
-            points=all_data
-        )
-        print("SUCCESS! Database is ready.")
-        print(f"   - Database location: {os.path.abspath(DB_PATH)}")
-    else:
-        print("WARNING: No data was found. Check your folders!")
+    process_pdfs()
+    process_images()
+    print(f"SUCCESS! Database is ready at: {os.path.abspath(DB_PATH)}")

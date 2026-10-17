@@ -4,6 +4,7 @@ __pycache__/
 
 # Virtual Environment
 venv/
+.venv/
 .env
 .env.txt
 # Large Data & Database (Don't upload the actual DB, teammates will re-generate it)

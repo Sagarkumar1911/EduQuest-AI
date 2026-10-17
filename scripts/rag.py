@@ -4,6 +4,7 @@ from dotenv import load_dotenv # Import this to read .env
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 from groq import Groq
+from scripts.llm_config import chat_with_fallback
 
 # --- 1. LOAD SECRETS ---
 # This forces the script to look for .env in the main folder (one level up)
@@ -88,19 +89,17 @@ def get_answer(query):
     """
 
     try:
-        chat_completion = groq_client.chat.completions.create(
+        ai_answer = chat_with_fallback(
+            groq_client,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": query}
             ],
-            model="llama-3.3-70b-versatile", 
             temperature=0.5,
             max_tokens=1024,
         )
 
         # D. SHOW RESULT
-        ai_answer = chat_completion.choices[0].message.content
-        
         print("\n" + "="*40)
         print(f"🎓 AI ANSWER:\n{ai_answer}")
         print("="*40)
